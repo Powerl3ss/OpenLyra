@@ -776,11 +776,14 @@ impl App {
                             }
                         });
                         ui.label(
-                            RichText::new(format!(
-                                "{} catégorie(s) cochée(s), {} élément(s) à supprimer",
-                                self.selected.len(),
-                                self.selected_entries()
-                            ))
+                            RichText::new({
+                                let (c, e) = (self.selected.len(), self.selected_entries());
+                                format!(
+                                    "{c} catégorie{} · {e} élément{} à supprimer",
+                                    if c > 1 { "s" } else { "" },
+                                    if e > 1 { "s" } else { "" }
+                                )
+                            })
                             .size(12.5)
                             .color(p.weak),
                         );

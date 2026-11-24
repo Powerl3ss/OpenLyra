@@ -5,6 +5,7 @@ pub mod odf;
 pub mod ooxml;
 pub mod pdf;
 pub mod png;
+pub mod traces;
 pub mod zipdoc;
 
 use crate::model::{FileKind, Group, Report};

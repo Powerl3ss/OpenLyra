@@ -2,7 +2,7 @@
 //! réécrit le document en conservant tout ce qui n'est pas supprimé.
 
 use anyhow::Result;
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::{BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
 #[derive(Debug, Default, Clone)]
@@ -144,27 +144,89 @@ pub enum Action {
 
 /// Réécrit un document XML en appliquant `f` à chaque élément.
 pub fn filter(xml: &[u8], mut f: impl FnMut(&BytesStart) -> Action) -> Result<Vec<u8>> {
+    transform(
+        xml,
+        |e, skipping| if skipping { Action::Keep } else { f(e) },
+        |_, _, _| AttrAction::Keep,
+        |_, _| None,
+    )
+}
+
+pub enum AttrAction {
+    Keep,
+    Drop,
+    Set(String),
+}
+
+/// Réécriture complète en flux :
+/// - `elem(balise, dans_une_partie_supprimée)` est appelé pour CHAQUE élément,
+///   même à l'intérieur d'une partie supprimée (utile pour compter), et sa
+///   réponse n'est prise en compte que hors partie supprimée ;
+/// - `attr(balise, attribut, valeur)` peut supprimer ou remplacer un attribut ;
+/// - `text(balise parente, texte)` peut remplacer un texte.
+/// Tout ce qui n'est pas modifié est recopié tel quel.
+pub fn transform(
+    xml: &[u8],
+    mut elem: impl FnMut(&BytesStart, bool) -> Action,
+    mut attr: impl FnMut(&str, &str, &str) -> AttrAction,
+    mut text: impl FnMut(&str, &str) -> Option<String>,
+) -> Result<Vec<u8>> {
     let mut r = Reader::from_reader(xml);
     r.trim_text(false);
     r.check_end_names(false);
     let mut w = Writer::new(Vec::with_capacity(xml.len()));
     let mut buf = Vec::new();
     let mut skip_depth = 0usize;
-    let mut open: Vec<bool> = Vec::new();
+    // (écrit ?, nom) pour chaque élément ouvert hors partie supprimée
+    let mut open: Vec<(bool, String)> = Vec::new();
+
+    let rebuild = |e: &BytesStart, attr: &mut dyn FnMut(&str, &str, &str) -> AttrAction| -> Option<BytesStart<'static>> {
+        let name = qname(e);
+        let mut changed = false;
+        let mut out: Vec<(String, String)> = Vec::new();
+        for a in e.attributes().with_checks(false).flatten() {
+            let k = String::from_utf8_lossy(a.key.as_ref()).into_owned();
+            let v = a
+                .unescape_value()
+                .map(|c| c.into_owned())
+                .unwrap_or_else(|_| String::from_utf8_lossy(&a.value).into_owned());
+            match attr(&name, &k, &v) {
+                AttrAction::Keep => out.push((k, v)),
+                AttrAction::Drop => changed = true,
+                AttrAction::Set(n) => {
+                    changed |= n != v;
+                    out.push((k, n));
+                }
+            }
+        }
+        if !changed {
+            return None;
+        }
+        let mut b = BytesStart::new(name);
+        for (k, v) in &out {
+            b.push_attribute((k.as_str(), v.as_str()));
+        }
+        Some(b)
+    };
+
     loop {
         let ev = r.read_event_into(&mut buf)?;
         match &ev {
             Event::Eof => break,
             Event::Start(e) => {
                 if skip_depth > 0 {
+                    elem(e, true);
                     skip_depth += 1;
                 } else {
-                    match f(e) {
+                    match elem(e, false) {
                         Action::Keep => {
-                            open.push(true);
-                            w.write_event(ev.clone())?;
+                            open.push((true, qname(e)));
+                            match rebuild(e, &mut attr) {
+                                Some(b) => w.write_event(Event::Start(b))?,
+                                None => w.write_event(ev.clone())?,
+                            }
                         }
-                        Action::Unwrap => open.push(false),
+                        Action::Unwrap => open.push((false, qname(e))),
                         Action::Drop => skip_depth = 1,
                     }
                 }
@@ -172,14 +234,27 @@ pub fn filter(xml: &[u8], mut f: impl FnMut(&BytesStart) -> Action) -> Result<Ve
             Event::End(_) => {
                 if skip_depth > 0 {
                     skip_depth -= 1;
-                } else if open.pop().unwrap_or(true) {
+                } else if open.pop().map(|o| o.0).unwrap_or(true) {
                     w.write_event(ev.clone())?;
                 }
             }
             Event::Empty(e) => {
+                if skip_depth > 0 {
+                    elem(e, true);
+                } else if let Action::Keep = elem(e, false) {
+                    match rebuild(e, &mut attr) {
+                        Some(b) => w.write_event(Event::Empty(b))?,
+                        None => w.write_event(ev.clone())?,
+                    }
+                }
+            }
+            Event::Text(t) => {
                 if skip_depth == 0 {
-                    if let Action::Keep = f(e) {
-                        w.write_event(ev.clone())?;
+                    let parent = open.last().map(|o| o.1.as_str()).unwrap_or("");
+                    let current = t.unescape().map(|c| c.into_owned()).unwrap_or_default();
+                    match text(parent, &current) {
+                        Some(n) if n != current => w.write_event(Event::Text(BytesText::new(&n)))?,
+                        _ => w.write_event(ev.clone())?,
                     }
                 }
             }

@@ -77,10 +77,19 @@ fn cli(args: &[String]) -> i32 {
         return 0;
     }
     let all = args.iter().any(|a| a == "--all");
+    // --groups id1,id2 : ne nettoyer que ces catégories
+    let only: Option<HashSet<String>> = args
+        .iter()
+        .position(|a| a == "--groups")
+        .and_then(|i| args.get(i + 1))
+        .map(|v| v.split(',').map(|s| s.trim().to_string()).collect());
     let sel: HashSet<String> = report
         .groups
         .iter()
-        .filter(|g| g.removable && (all || g.recommended))
+        .filter(|g| match &only {
+            Some(o) => g.removable && o.contains(&g.id),
+            None => g.removable && (all || g.recommended),
+        })
         .map(|g| g.id.clone())
         .collect();
     let out = args

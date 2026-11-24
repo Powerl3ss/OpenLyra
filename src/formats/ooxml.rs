@@ -1,6 +1,6 @@
 //! Microsoft Office (docx, xlsx, pptx et variantes).
 
-use super::zipdoc;
+use super::{traces, zipdoc};
 use crate::model::{Entry, FileKind, Group, Risk};
 use crate::xml::{self, Action};
 use anyhow::Result;
@@ -244,6 +244,12 @@ pub fn analyze(bytes: &[u8], kind: FileKind) -> Result<(Vec<Group>, Vec<String>)
     for g in extra_groups {
         groups.insert(pos, g);
     }
+    if kind == FileKind::Word {
+        groups.extend(traces::analyze_word(&entries));
+    } else {
+        groups.extend(traces::analyze_rels_only(&entries));
+    }
+    groups.sort_by(|a, b| b.risk.cmp(&a.risk));
     Ok((groups, warnings))
 }
 
@@ -341,6 +347,11 @@ pub fn clean(bytes: &[u8], kind: FileKind, sel: &HashSet<String>) -> Result<(Vec
         }
     }
     zipdoc::clean_media(&mut entries, sel, &mut notes, &["word/media/", "xl/media/", "ppt/media/"]);
+    if kind == FileKind::Word {
+        traces::clean_word(&mut entries, sel, &mut notes)?;
+    } else {
+        traces::clean_rels_only(&mut entries, sel)?;
+    }
     if rm_revisions {
         notes.push("Modifications suivies acceptées.".into());
     }

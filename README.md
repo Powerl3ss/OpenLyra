@@ -27,6 +27,22 @@
 | **Word, Excel, PowerPoint** (docx, xlsx, pptx…) | Auteurs, société, responsable, dates, titre, modèle (et son chemin), temps d'édition, nombre de révisions, propriétés personnalisées, miniature, imprimante, métadonnées des photos insérées. Pour Word : commentaires et suivi des modifications (accepté automatiquement). |
 | **LibreOffice** (odt, ods, odp…) | Créateur, dernier auteur, imprimé par, dates, modèle, durée d'édition, propriétés personnalisées, miniature, imprimante, photos insérées, commentaires, suivi des modifications (texte). |
 
+### Traces dans le contenu (Word et LibreOffice)
+
+Au-delà des propriétés, Lyra détecte et retire les traces cachées dans le contenu même du document :
+
+| Catégorie | Ce que c'est | Par défaut |
+|---|---|---|
+| Chemins de fichiers locaux | Liens, images liées, publipostage pointant vers `C:\Users\…` (révèle souvent le nom d'utilisateur) | coché |
+| Champs liés à l'auteur | Champs AUTEUR, NOM D'UTILISATEUR, INITIALES, données de l'expéditeur, chemin du fichier | coché |
+| Identifiants de session d'édition | Codes (rsid) qui relient le document à d'autres édités sur le même PC ou aux mêmes moments | coché |
+| Variables cachées | Valeurs stockées par des macros, modèles ou logiciels | coché |
+| Paramètres enregistrés (LibreOffice) | Source de données de publipostage, télécopieur | coché |
+| Texte masqué | Texte présent dans le fichier mais invisible | à cocher |
+| Signets | Noms internes renommés de façon neutre, `_GoBack` supprimé ; table des matières et renvois continuent de fonctionner | à cocher |
+
+Le texte visible n'est jamais réécrit : Lyra ne modifie ni le style ni le fond du document.
+
 Le nettoyage EXIF est **sélectif** : on peut par exemple retirer le GPS et l'appareil tout en gardant l'orientation, pour que la photo ne pivote pas.
 
 ## Installation
@@ -89,6 +105,7 @@ Astuce : sous Windows, tu peux faire *clic droit > Ouvrir avec > Lyra* sur un fi
 lyra analyze fichier.pdf
 lyra clean fichier.pdf            # sélection recommandée
 lyra clean fichier.pdf --all -o propre.pdf
+lyra clean fichier.docx --groups trace.paths,trace.rsid   # catégories précises
 lyra update                          # mise à jour depuis GitHub
 lyra --version
 ```
@@ -109,7 +126,7 @@ src/
 ├── main.rs          point d'entrée (interface ou ligne de commande)
 ├── gui.rs           interface egui
 ├── model.rs         rapport, catégories, niveaux de risque
-├── xml.rs           lecture et filtrage XML en flux
+├── xml.rs           lecture et réécriture XML en flux
 ├── exifmeta.rs      analyse et reconstruction sélective de l'EXIF
 ├── xmp.rs           lecture des paquets XMP
 ├── updater.rs       mises à jour depuis les releases GitHub
@@ -118,6 +135,7 @@ src/
     ├── jpeg.rs  png.rs  pdf.rs
     ├── zipdoc.rs    conteneur zip commun (Office / LibreOffice)
     ├── ooxml.rs     Word, Excel, PowerPoint
+    ├── traces.rs    traces dans le contenu (Word, LibreOffice)
     └── odf.rs       LibreOffice
 ```
 

@@ -1,6 +1,6 @@
 //! OpenDocument (LibreOffice : odt, ods, odp, odg…).
 
-use super::zipdoc;
+use super::{traces, zipdoc};
 use crate::model::{Entry, FileKind, Group};
 use crate::xml::{self, Action};
 use anyhow::Result;
@@ -155,6 +155,8 @@ pub fn analyze(bytes: &[u8]) -> Result<(Vec<Group>, Vec<String>)> {
             *g = g.clone().info_only().note("Accepte les modifications depuis LibreOffice (Édition > Suivi des modifications).");
         }
     }
+    groups.extend(traces::analyze_odf(&entries));
+    groups.sort_by(|a, b| b.risk.cmp(&a.risk));
     Ok((groups, vec![]))
 }
 
@@ -211,6 +213,7 @@ pub fn clean(bytes: &[u8], sel: &HashSet<String>) -> Result<(Vec<u8>, Vec<String
         }
     }
     zipdoc::clean_media(&mut entries, sel, &mut notes, &["Pictures/"]);
+    traces::clean_odf(&mut entries, sel, &mut notes)?;
     if rm_rev {
         notes.push("Modifications suivies acceptées.".into());
     }
