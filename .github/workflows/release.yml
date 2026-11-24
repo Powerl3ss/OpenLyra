@@ -1,0 +1,141 @@
+name: Publier une version
+
+# Trois façons de publier :
+#  1. Depuis GitHub : onglet Actions > « Publier une version » > Run workflow,
+#     puis indiquer le numéro (ex. 1.1.0) et, si tu veux, les nouveautés.
+#  2. Changer « version » dans Cargo.toml et pousser sur main : si cette
+#     version n'a pas encore de release, elle est publiée automatiquement.
+#  3. Pousser un tag : git tag v1.1.0 && git push origin v1.1.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Numéro de la nouvelle version (ex. 1.1.0)"
+        required: true
+      notes:
+        description: "Nouveautés (facultatif, affichées dans Lyra)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      sha: ${{ steps.v.outputs.sha }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Préparer le numéro de version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+            VERSION="${VERSION#v}"
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Version invalide : $VERSION (format attendu : 1.2.3)"; exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null; then
+              echo "::error::La version v$VERSION existe déjà"; exit 1
+            fi
+            # Mise à jour de Cargo.toml et Cargo.lock
+            sed -i "0,/^version = \".*\"/s//version = \"$VERSION\"/" Cargo.toml
+            awk -v v="$VERSION" '
+              /^name = "lyra"$/ {print; getline; print "version = \"" v "\""; next} {print}
+            ' Cargo.lock > Cargo.lock.tmp && mv Cargo.lock.tmp Cargo.lock
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "Version $VERSION"
+            git tag "v$VERSION"
+            git push origin HEAD "v$VERSION"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            CARGO=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+            if [ "$CARGO" != "$VERSION" ]; then
+              echo "::error::Le tag v$VERSION ne correspond pas à la version de Cargo.toml ($CARGO)"; exit 1
+            fi
+          else
+            # Push sur main : publier seulement si cette version n'existe pas encore.
+            VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+            if git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null; then
+              echo "La version v$VERSION est déjà publiée, rien à faire."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            exe: lyra.exe
+            asset: Lyra-windows.exe
+          - os: macos-latest
+            exe: lyra
+            asset: Lyra-macos
+          - os: ubuntu-latest
+            exe: lyra
+            asset: Lyra-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compiler
+        run: cargo build --release
+      - name: Préparer le fichier et son empreinte SHA-256
+        shell: bash
+        run: |
+          mkdir dist
+          cp "target/release/${{ matrix.exe }}" "dist/${{ matrix.asset }}"
+          cd dist
+          if command -v sha256sum >/dev/null; then
+            sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Créer la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ needs.prepare.outputs.sha }}
+          name: Lyra ${{ needs.prepare.outputs.tag }}
+          body: ${{ github.event.inputs.notes }}
+          generate_release_notes: true
+          files: dist/*
