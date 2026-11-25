@@ -29,8 +29,8 @@ const SACCADE_LEN: f32 = 0.075;
 const DILATE: (f32, f32) = (3.95, 4.5);
 const ZOOM_START: f32 = 4.35;
 const ZOOM_LEN: f32 = 1.3;
-const REVEAL: (f32, f32) = (5.3, 6.0);
-pub const DURATION: f32 = 6.0;
+const REVEAL: (f32, f32) = (5.2, 6.25);
+pub const DURATION: f32 = 6.25;
 
 const GREY: Color32 = Color32::from_rgb(201, 206, 216);
 const ACCENT: Color32 = Color32::from_rgb(88, 132, 255);
@@ -181,30 +181,6 @@ fn shade(wx: f32, wy: f32, p: &Pose) -> (f32, bool) {
     }
 }
 
-/// Anneau noir : transparent en `r_soft`, opaque de `r_in` jusqu'à `r_out`.
-fn annulus(painter: &egui::Painter, c: Pos2, r_soft: f32, r_in: f32, r_out: f32, color: Color32) {
-    let n = 128;
-    let mut mesh = egui::Mesh::default();
-    let clear = Color32::TRANSPARENT;
-    for i in 0..n {
-        let a = i as f32 / n as f32 * std::f32::consts::TAU;
-        let d = Vec2::new(a.cos(), a.sin());
-        mesh.colored_vertex(c + d * r_soft, clear);
-        mesh.colored_vertex(c + d * r_in, color);
-        mesh.colored_vertex(c + d * r_out, color);
-    }
-    for i in 0..n {
-        let j = (i + 1) % n;
-        let (a0, a1, a2) = (3 * i as u32, 3 * i as u32 + 1, 3 * i as u32 + 2);
-        let (b0, b1, b2) = (3 * j as u32, 3 * j as u32 + 1, 3 * j as u32 + 2);
-        mesh.add_triangle(a0, a1, b1);
-        mesh.add_triangle(a0, b1, b0);
-        mesh.add_triangle(a1, a2, b2);
-        mesh.add_triangle(a1, b2, b1);
-    }
-    painter.add(egui::Shape::mesh(mesh));
-}
-
 impl Splash {
     pub fn new() -> Self {
         Splash { start: None }
@@ -231,9 +207,9 @@ impl Splash {
 
         let screen = ctx.screen_rect();
         let pose = Pose::at(t);
-        // Ouverture finale : la pupille s'ouvre en cercle sur l'interface.
-        let open_k = smooth(REVEAL.0, REVEAL.1, t);
-        let alpha = pose.appear * (1.0 - 0.5 * open_k);
+        // Révélation finale : l'écran se « décode » case par case.
+        let reveal_k = smooth(REVEAL.0, REVEAL.1, t);
+        let alpha = pose.appear;
 
         let mut clicked = false;
         egui::Area::new(Id::new("lyra_splash"))
@@ -247,18 +223,6 @@ impl Splash {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
                 let painter = ui.painter();
-                let diag = rect.size().length();
-                let hole = open_k * (diag / 2.0 + 60.0);
-                if open_k <= 0.0 {
-                    painter.rect_filled(rect, 0.0, Color32::BLACK);
-                } else {
-                    // Fond noir percé d'un cercle, avec un bord en dégradé
-                    let c = rect.center();
-                    annulus(painter, c, (hole - 14.0).max(0.0), hole, diag, Color32::BLACK);
-                    // Liseré bleu, comme le bord de l'iris
-                    painter.circle_stroke(c, hole, egui::Stroke::new(2.0_f32, ACCENT.gamma_multiply(1.0 - open_k)));
-                }
-
                 let font = FontId::monospace(11.0);
                 let cw = ctx.fonts(|f| f.glyph_width(&font, '@'));
                 let ch = ctx.fonts(|f| f.row_height(&font));
@@ -268,22 +232,83 @@ impl Splash {
                 let a = rect.width() * 0.34; // demi-largeur de l'œil en pixels
                 let x0 = center.x - cols as f32 * cw / 2.0;
                 let y0 = center.y - rows as f32 * ch / 2.0;
+                let max_d = (rect.size() / 2.0).length();
+
+                // Progression de la révélation pour une case : un front irrégulier
+                // part du centre ; chaque case s'efface sur une courte durée.
+                let cell_reveal = |c: i32, r: i32, px: f32, py: f32| -> f32 {
+                    if reveal_k <= 0.0 {
+                        return 0.0;
+                    }
+                    let d = (Pos2::new(px, py) - center).length() / max_d;
+                    let threshold = 0.68 * d + 0.32 * hash(c, r, 21);
+                    ((reveal_k * 1.4 - threshold) / 0.4).clamp(0.0, 1.0)
+                };
+
+                // Fond noir, case par case pendant la révélation
+                if reveal_k <= 0.0 {
+                    painter.rect_filled(rect, 0.0, Color32::BLACK);
+                } else {
+                    let mut mesh = egui::Mesh::default();
+                    for r in 0..rows {
+                        let py = y0 + (r as f32 + 0.5) * ch;
+                        for c in 0..cols {
+                            let px = x0 + (c as f32 + 0.5) * cw;
+                            let lp = cell_reveal(c, r, px, py);
+                            if lp < 1.0 {
+                                let o = 1.0 - smooth(0.25, 1.0, lp);
+                                let cell = egui::Rect::from_min_size(
+                                    Pos2::new(x0 + c as f32 * cw, y0 + r as f32 * ch),
+                                    Vec2::new(cw + 0.5, ch + 0.5),
+                                );
+                                mesh.add_colored_rect(cell, Color32::BLACK.gamma_multiply(o));
+                            }
+                        }
+                    }
+                    painter.add(egui::Shape::mesh(mesh));
+                }
+
+                // Zone réservée au texte d'aide : aucun caractère derrière.
+                let hint_alpha = pose.appear * (1.0 - smooth(ZOOM_START - 0.2, ZOOM_START + 0.2, t)) * 0.6;
+                let hint_text = "Clique ou appuie sur une touche pour passer";
+                let hint_font = FontId::proportional(12.5);
+                let hint_pos = rect.center_bottom() - Vec2::new(0.0, 28.0);
+                let hint_size = ctx.fonts(|f| f.layout_no_wrap(hint_text.to_string(), hint_font.clone(), GREY).size());
+                let hint_zone = egui::Rect::from_center_size(hint_pos, hint_size + Vec2::new(56.0, 22.0));
 
                 let grey = GREY.gamma_multiply(alpha);
                 let accent = ACCENT.gamma_multiply(alpha);
+                let decode = ACCENT.gamma_multiply(0.95);
+                let flicker = (t * 26.0) as u32;
                 let mut line_g = String::with_capacity(cols as usize);
                 let mut line_a = String::with_capacity(cols as usize);
+                let mut line_d = String::with_capacity(cols as usize);
                 for r in 0..rows {
                     line_g.clear();
                     line_a.clear();
+                    line_d.clear();
                     let py = y0 + (r as f32 + 0.5) * ch;
                     for c in 0..cols {
                         let px = x0 + (c as f32 + 0.5) * cw;
-                        if hole > 0.0 && (Pos2::new(px, py) - center).length() < hole + 6.0 {
+                        let lp = cell_reveal(c, r, px, py);
+                        let hidden = hint_alpha > 0.01 && hint_zone.contains(Pos2::new(px, py));
+                        if lp >= 1.0 || hidden {
                             line_g.push(' ');
                             line_a.push(' ');
+                            line_d.push(' ');
                             continue;
                         }
+                        if lp > 0.0 {
+                            // Case en cours de « décodage » : caractères bleus qui
+                            // scintillent puis s'amenuisent avant de disparaître.
+                            let energy = (1.0 - lp) * (0.55 + 0.45 * hash(c, r, flicker));
+                            let i = (energy * (RAMP.len() - 1) as f32).round().clamp(1.0, (RAMP.len() - 1) as f32) as usize;
+                            line_g.push(' ');
+                            line_a.push(' ');
+                            line_d.push(RAMP[i] as char);
+                            continue;
+                        }
+                        line_d.push(' ');
                         // Apparition : les points se rassemblent progressivement
                         let visible = hash(c, r, 1) < pose.appear * 1.15 - 0.05;
                         let (mut b, is_iris) = if visible {
@@ -307,24 +332,20 @@ impl Splash {
                         }
                     }
                     let pos = Pos2::new(x0, y0 + r as f32 * ch);
-                    if line_g.trim().len() > 0 {
+                    if !line_g.trim().is_empty() {
                         painter.text(pos, Align2::LEFT_TOP, &line_g, font.clone(), grey);
                     }
-                    if line_a.trim().len() > 0 {
+                    if !line_a.trim().is_empty() {
                         painter.text(pos, Align2::LEFT_TOP, &line_a, font.clone(), accent);
+                    }
+                    if !line_d.trim().is_empty() {
+                        painter.text(pos, Align2::LEFT_TOP, &line_d, font.clone(), decode);
                     }
                 }
 
-                // Indication discrète
-                let hint_alpha = pose.appear * (1.0 - smooth(ZOOM_START - 0.2, ZOOM_START + 0.2, t)) * 0.55;
+                // Indication discrète, sur une zone dégagée
                 if hint_alpha > 0.01 {
-                    painter.text(
-                        rect.center_bottom() - Vec2::new(0.0, 28.0),
-                        Align2::CENTER_CENTER,
-                        "Clique ou appuie sur une touche pour passer",
-                        FontId::proportional(12.5),
-                        GREY.gamma_multiply(hint_alpha),
-                    );
+                    painter.text(hint_pos, Align2::CENTER_CENTER, hint_text, hint_font, GREY.gamma_multiply(hint_alpha));
                 }
             });
         if clicked && t < ZOOM_START + ZOOM_LEN * 0.6 {

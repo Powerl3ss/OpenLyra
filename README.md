@@ -8,7 +8,7 @@
 
 ## Fonctionnalités
 
-- **Écran de chargement** : un œil en ASCII apparaît, cligne, puis on plonge dans sa pupille qui s'ouvre sur l'interface. Un clic ou une touche permet de le passer.
+- **Écran de chargement** : un œil en ASCII apparaît, regarde autour de lui et cligne, puis on plonge dans sa pupille et l'interface se « décode » à l'écran. Un clic ou une touche permet de le passer.
 
 <p align="center"><img src="docs/ecran_chargement.gif" width="600" alt="Écran de chargement de Lyra"></p>
 
