@@ -1,6 +1,6 @@
 [package]
 name = "lyra"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2021"
 description = "Analyse et nettoyage des métadonnées cachées des documents"
 repository = "https://github.com/Powerl3ss/OpenLyra"
