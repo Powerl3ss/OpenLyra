@@ -86,7 +86,7 @@ fn eyelids(t: f32) -> f32 {
     open
 }
 
-/// Direction du regard : saccades + micro-tremblements permanents.
+/// Direction du regard : saccades + légère dérive pendant les fixations.
 fn gaze(t: f32) -> (f32, f32) {
     let mut g = (SACCADES[0].1, SACCADES[0].2);
     for w in SACCADES.windows(2) {
@@ -97,9 +97,11 @@ fn gaze(t: f32) -> (f32, f32) {
         g.0 = lerp(g.0, x, m * overshoot.min(1.12));
         g.1 = lerp(g.1, y, m * overshoot.min(1.12));
     }
-    let tremor = 0.0035;
-    g.0 += tremor * ((t * 23.0).sin() + 0.6 * (t * 37.0 + 1.3).sin());
-    g.1 += tremor * ((t * 29.0 + 0.7).sin() + 0.5 * (t * 41.0).sin());
+    // Dérive très lente et discrète pendant les fixations (pas de vibration
+    // rapide : sur une grille de caractères, elle ferait trembler l'iris).
+    let drift = 0.0028;
+    g.0 += drift * ((t * 0.9).sin() + 0.5 * (t * 1.7 + 1.3).sin());
+    g.1 += drift * 0.6 * ((t * 1.1 + 0.7).sin() + 0.5 * (t * 0.6).sin());
     g
 }
 
