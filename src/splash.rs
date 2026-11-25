@@ -10,14 +10,27 @@ use eframe::egui::{self, Align2, Color32, FontId, Id, Order, Pos2, Sense, Vec2};
 const RAMP: &[u8] = b" .:-=+*#%@";
 
 // Chronologie (secondes)
-const APPEAR_END: f32 = 0.9;
-const BLINK_START: f32 = 1.05;
-const BLINK_LEN: f32 = 0.34;
-const DILATE: (f32, f32) = (1.45, 1.95);
-const ZOOM_START: f32 = 1.9;
-const ZOOM_LEN: f32 = 1.05;
-const REVEAL: (f32, f32) = (2.62, 3.25);
-pub const DURATION: f32 = 3.25;
+const APPEAR_END: f32 = 1.5;
+/// Clignements : (début, intensité). Fermeture rapide, réouverture plus lente.
+const BLINKS: &[(f32, f32)] = &[(2.2, 1.0), (3.75, 0.35)];
+const BLINK_CLOSE: f32 = 0.09;
+const BLINK_HOLD: f32 = 0.05;
+const BLINK_OPEN: f32 = 0.22;
+/// Saccades du regard : (instant, x, y). Le regard saute vite puis se fixe.
+const SACCADES: &[(f32, f32, f32)] = &[
+    (0.0, 0.0, 0.0),
+    (1.25, -0.07, 0.012),
+    (1.85, -0.025, 0.022),
+    (2.75, 0.075, -0.022),
+    (3.25, 0.035, 0.006),
+    (3.9, 0.0, 0.0),
+];
+const SACCADE_LEN: f32 = 0.075;
+const DILATE: (f32, f32) = (3.95, 4.5);
+const ZOOM_START: f32 = 4.35;
+const ZOOM_LEN: f32 = 1.3;
+const REVEAL: (f32, f32) = (5.3, 6.0);
+pub const DURATION: f32 = 6.0;
 
 const GREY: Color32 = Color32::from_rgb(201, 206, 216);
 const ACCENT: Color32 = Color32::from_rgb(88, 132, 255);
@@ -54,23 +67,58 @@ struct Pose {
     cam: (f32, f32),
 }
 
+/// Ouverture des paupières (1 = ouvert, 0 = fermé) au fil des clignements.
+fn eyelids(t: f32) -> f32 {
+    let mut open: f32 = 1.0;
+    for &(b, depth) in BLINKS {
+        let u = t - b;
+        let closed = if u < 0.0 {
+            0.0
+        } else if u < BLINK_CLOSE {
+            smooth(0.0, BLINK_CLOSE, u)
+        } else if u < BLINK_CLOSE + BLINK_HOLD {
+            1.0
+        } else {
+            1.0 - smooth(BLINK_CLOSE + BLINK_HOLD, BLINK_CLOSE + BLINK_HOLD + BLINK_OPEN, u)
+        };
+        open = open.min(1.0 - closed * depth);
+    }
+    open
+}
+
+/// Direction du regard : saccades + micro-tremblements permanents.
+fn gaze(t: f32) -> (f32, f32) {
+    let mut g = (SACCADES[0].1, SACCADES[0].2);
+    for w in SACCADES.windows(2) {
+        let (k, x, y) = w[1];
+        let m = smooth(k, k + SACCADE_LEN, t);
+        // léger dépassement puis retour, comme un vrai mouvement d'œil
+        let overshoot = 1.0 + 0.12 * (smooth(k, k + SACCADE_LEN, t) - smooth(k + SACCADE_LEN, k + SACCADE_LEN * 2.5, t));
+        g.0 = lerp(g.0, x, m * overshoot.min(1.12));
+        g.1 = lerp(g.1, y, m * overshoot.min(1.12));
+    }
+    let tremor = 0.0035;
+    g.0 += tremor * ((t * 23.0).sin() + 0.6 * (t * 37.0 + 1.3).sin());
+    g.1 += tremor * ((t * 29.0 + 0.7).sin() + 0.5 * (t * 41.0).sin());
+    g
+}
+
 impl Pose {
     fn at(t: f32) -> Self {
         let appear = smooth(0.0, APPEAR_END, t);
-        let u = (t - BLINK_START) / BLINK_LEN;
-        let open = if (0.0..=1.0).contains(&u) {
-            1.0 - (u * std::f32::consts::PI).sin().powf(0.8)
-        } else {
-            1.0
-        };
+        let open = eyelids(t);
         let zp = ((t - ZOOM_START) / ZOOM_LEN).clamp(0.0, 1.0);
-        let gaze_amp = 0.035 * (1.0 - smooth(1.6, ZOOM_START, t));
-        let gaze = ((t * 1.9).sin() * gaze_amp, (t * 1.3).cos() * gaze_amp * 0.4);
-        let pupil = 0.12 * (1.0 + 0.28 * smooth(DILATE.0, DILATE.1, t));
-        // Plongée : accélération exponentielle vers le centre de la pupille.
+        // Pendant la plongée, le regard se fige au centre.
+        let freeze = smooth(ZOOM_START - 0.3, ZOOM_START, t);
+        let g = gaze(t);
+        let gaze = (g.0 * (1.0 - freeze), g.1 * (1.0 - freeze));
+        // Pupille vivante (« hippus ») qui se dilate avant la plongée,
+        // et se contracte un peu juste après le grand clignement.
+        let hippus = 0.035 * (t * 2.1).sin() + 0.02 * (t * 3.3 + 1.0).sin();
+        let after_blink = 0.08 * (smooth(BLINKS[0].0 + 0.2, BLINKS[0].0 + 0.45, t) - smooth(BLINKS[0].0 + 0.6, BLINKS[0].0 + 1.4, t));
+        let pupil = 0.115 * (1.0 + hippus - after_blink + 0.32 * smooth(DILATE.0, DILATE.1, t));
         let zoom = (3.6 * zp * zp * zp).exp() * (1.0 + 2.2 * zp * zp);
-        let c = smooth(ZOOM_START, ZOOM_START + 0.5, t);
-        Pose { open, gaze, pupil, appear, zoom, cam: (gaze.0 * c, gaze.1 * c) }
+        Pose { open, gaze, pupil, appear, zoom, cam: (0.0, 0.0) }
     }
 }
 
@@ -79,8 +127,10 @@ fn shade(wx: f32, wy: f32, p: &Pose) -> (f32, bool) {
     let f = (1.0 - wx * wx).max(0.0).powf(0.85);
     let (bu, bl) = (0.42, 0.34);
     let meet = bl * f * 0.3;
-    let top = lerp(meet, -bu * f, p.open);
-    let bottom = lerp(meet, bl * f, p.open);
+    // La paupière supérieure suit le regard vertical, l'inférieure un peu.
+    let follow = p.gaze.1 * f;
+    let top = lerp(meet, -bu * f + follow * 1.6, p.open);
+    let bottom = lerp(meet, bl * f + follow * 0.6, p.open);
     let inside = wx.abs() < 1.0 && wy > top && wy < bottom;
 
     if inside {
@@ -95,8 +145,8 @@ fn shade(wx: f32, wy: f32, p: &Pose) -> (f32, bool) {
         if d < p.pupil {
             b = 0.035;
             // reflet (disparaît pendant la plongée)
-            let (hx, hy) = (dx + 0.055, dy + 0.06);
-            if p.zoom < 2.0 && (hx * hx + hy * hy).sqrt() < 0.032 {
+            let (hx, hy) = (wx - (gx * 0.45 - 0.055), wy - (gy * 0.45 - 0.06));
+            if p.zoom < 1.25 && (hx * hx + hy * hy).sqrt() < 0.032 {
                 b = 0.97;
             }
         } else if d < iris_r {
