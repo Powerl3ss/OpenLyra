@@ -6,21 +6,6 @@
 
 ![Analyse d'une photo](docs/capture_analyse.png)
 
-## Fonctionnalités
-
-- **Écran de chargement** : un œil en ASCII apparaît, regarde autour de lui et cligne, puis on plonge dans sa pupille et l'interface se « décode » à l'écran. Un clic ou une touche permet de le passer.
-
-<p align="center"><img src="docs/ecran_chargement.gif" width="600" alt="Écran de chargement de Lyra"></p>
-
-- **Glisser-déposer** ou sélection classique du fichier.
-- **Rapport détaillé** : chaque catégorie de métadonnées est expliquée, classée par niveau de risque (élevé, moyen, faible) et dépliable pour voir chaque valeur. Pour les photos géolocalisées, un lien ouvre la position sur une carte.
-- **Choix précis** de ce qu'il faut supprimer, catégorie par catégorie, avec trois raccourcis : *Recommandée*, *Tout*, *Rien*. La sélection recommandée retire tout ce qui est sensible sans toucher au rendu ni au contenu.
-- **Recherche** dans le rapport (un nom, « GPS », une date…).
-- **Enregistrement sûr** : par défaut une copie `nom_nettoye.ext` est créée et l'original reste intact. On peut aussi choisir l'emplacement ou remplacer l'original (avec confirmation).
-- **Vérification automatique** : après le nettoyage, le nouveau fichier est réanalysé et le nombre d'éléments restants est affiché.
-- **Export du rapport** en fichier texte.
-- Thème sombre et thème clair.
-
 ## Formats et métadonnées pris en charge
 
 | Format | Ce qui est détecté et supprimable |
@@ -62,19 +47,6 @@ Windows peut afficher « Windows a protégé votre ordinateur » car l'exécutab
 Au démarrage, Lyra vérifie s'il existe une version plus récente sur GitHub. Si c'est le cas, un bandeau propose de **mettre à jour** : la nouvelle version est téléchargée, son empreinte SHA-256 est vérifiée, puis l'exécutable est remplacé. Il suffit ensuite de cliquer sur **Redémarrer Lyra**. Le bouton *Mises à jour* en haut à droite permet aussi de vérifier à la main.
 
 Lyra ne contacte Internet que pour cette vérification (API publique de GitHub). Tes documents ne quittent jamais ton ordinateur.
-
-### Compiler soi-même (Windows, macOS ou Linux)
-
-1. Installe Rust depuis <https://rustup.rs> (sous Windows, accepte l'installation des outils Visual Studio C++ proposée).
-2. Ouvre un terminal dans ce dossier puis lance :
-
-   ```
-   cargo build --release
-   ```
-
-3. Le programme se trouve dans `target/release/` (`lyra.exe` sous Windows). Tu peux le copier où tu veux : c'est un seul fichier, sans installation.
-
-Pour le lancer directement : `cargo run --release`.
 
 ## Publier une nouvelle version
 
