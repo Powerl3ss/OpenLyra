@@ -5,6 +5,7 @@ mod exifmeta;
 mod formats;
 mod gui;
 mod model;
+mod splash;
 mod updater;
 mod xml;
 mod xmp;

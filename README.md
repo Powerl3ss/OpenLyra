@@ -8,6 +8,10 @@
 
 ## Fonctionnalités
 
+- **Écran de chargement** : un œil en ASCII apparaît, cligne, puis on plonge dans sa pupille qui s'ouvre sur l'interface. Un clic ou une touche permet de le passer.
+
+<p align="center"><img src="docs/ecran_chargement.gif" width="600" alt="Écran de chargement de Lyra"></p>
+
 - **Glisser-déposer** ou sélection classique du fichier.
 - **Rapport détaillé** : chaque catégorie de métadonnées est expliquée, classée par niveau de risque (élevé, moyen, faible) et dépliable pour voir chaque valeur. Pour les photos géolocalisées, un lien ouvre la position sur une carte.
 - **Choix précis** de ce qu'il faut supprimer, catégorie par catégorie, avec trois raccourcis : *Recommandée*, *Tout*, *Rien*. La sélection recommandée retire tout ce qui est sensible sans toucher au rendu ni au contenu.
@@ -130,6 +134,7 @@ src/
 ├── exifmeta.rs      analyse et reconstruction sélective de l'EXIF
 ├── xmp.rs           lecture des paquets XMP
 ├── updater.rs       mises à jour depuis les releases GitHub
+├── splash.rs        écran de chargement (œil ASCII animé)
 └── formats/
     ├── mod.rs       détection du format et aiguillage
     ├── jpeg.rs  png.rs  pdf.rs

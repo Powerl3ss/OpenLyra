@@ -114,6 +114,7 @@ enum Upd {
 }
 
 struct App {
+    splash: Option<crate::splash::Splash>,
     dark: bool,
     upd: Arc<Mutex<Upd>>,
     upd_hidden: bool,
@@ -131,6 +132,7 @@ struct App {
 impl App {
     fn new(cc: &eframe::CreationContext, initial: Option<PathBuf>) -> Self {
         let mut app = App {
+            splash: Some(crate::splash::Splash::new()),
             dark: true,
             upd: Arc::new(Mutex::new(Upd::Idle)),
             upd_hidden: false,
@@ -553,6 +555,13 @@ impl eframe::App for App {
                     self.empty_view(ui, &p);
                 }
             });
+
+        // Écran de chargement par-dessus l'interface (déjà prête en dessous).
+        if let Some(splash) = self.splash.as_mut() {
+            if !splash.show(ctx) {
+                self.splash = None;
+            }
+        }
 
         if hovering {
             let rect = ctx.screen_rect();
