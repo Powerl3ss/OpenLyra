@@ -61,7 +61,7 @@ impl Pal {
                 border: Color32::from_rgb(38, 43, 56),
                 text: Color32::from_rgb(232, 235, 242),
                 weak: Color32::from_rgb(140, 148, 166),
-                accent: Color32::from_rgb(88, 132, 255),
+                accent: Color32::from_rgb(139, 92, 246),
                 success: Color32::from_rgb(52, 199, 120),
             }
         } else {
@@ -72,7 +72,7 @@ impl Pal {
                 border: Color32::from_rgb(222, 226, 234),
                 text: Color32::from_rgb(24, 28, 38),
                 weak: Color32::from_rgb(105, 112, 128),
-                accent: Color32::from_rgb(52, 98, 235),
+                accent: Color32::from_rgb(124, 58, 237),
                 success: Color32::from_rgb(28, 150, 85),
             }
         }

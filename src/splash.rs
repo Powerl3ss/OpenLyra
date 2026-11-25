@@ -33,7 +33,7 @@ const REVEAL: (f32, f32) = (5.2, 6.25);
 pub const DURATION: f32 = 6.25;
 
 const GREY: Color32 = Color32::from_rgb(201, 206, 216);
-const ACCENT: Color32 = Color32::from_rgb(88, 132, 255);
+const ACCENT: Color32 = Color32::from_rgb(155, 107, 255);
 
 pub struct Splash {
     start: Option<f64>,
@@ -301,7 +301,7 @@ impl Splash {
                             continue;
                         }
                         if lp > 0.0 {
-                            // Case en cours de « décodage » : caractères bleus qui
+                            // Case en cours de « décodage » : caractères violets qui
                             // scintillent puis s'amenuisent avant de disparaître.
                             let energy = (1.0 - lp) * (0.55 + 0.45 * hash(c, r, flicker));
                             let i = (energy * (RAMP.len() - 1) as f32).round().clamp(1.0, (RAMP.len() - 1) as f32) as usize;
