@@ -48,46 +48,6 @@ Au démarrage, Lyra vérifie s'il existe une version plus récente sur GitHub. S
 
 Lyra ne contacte Internet que pour cette vérification (API publique de GitHub). Tes documents ne quittent jamais ton ordinateur.
 
-## Publier une nouvelle version
-
-Les mises à jour proposées dans Lyra viennent des **Releases** de ce dépôt. Pour en publier une :
-
-**Depuis le site GitHub (le plus simple)**
-
-1. Pousse tes modifications sur `main`.
-2. Onglet **Actions** > **Publier une version** > **Run workflow**.
-3. Indique le numéro (par exemple `1.1.0`, il doit être plus grand que le précédent) et, si tu veux, les nouveautés.
-
-Le workflow met à jour `Cargo.toml`, crée le tag, compile Windows, macOS et Linux, calcule les empreintes SHA-256 et publie la release. Quelques minutes plus tard, tous les Lyra installés proposent la mise à jour.
-
-**En changeant le numéro de version**
-
-Modifie `version = "1.1.0"` dans `Cargo.toml` (même directement sur le site GitHub) et pousse sur `main`. Si cette version n'a pas encore de release, elle est publiée automatiquement. Les autres pushs sur `main` ne publient rien.
-
-Le workflow `Vérification` compile et teste aussi le projet à chaque push sur `main`.
-
-## Utilisation
-
-1. Lance Lyra et glisse un fichier dans la fenêtre.
-2. Lis le rapport, déplie les catégories pour voir les valeurs.
-3. Coche ce que tu veux supprimer (la sélection recommandée est déjà cochée).
-4. Clique sur **Nettoyer la sélection**.
-
-Astuce : sous Windows, tu peux faire *clic droit > Ouvrir avec > Lyra* sur un fichier, il sera analysé dès l'ouverture.
-
-### Ligne de commande (facultatif)
-
-```
-lyra analyze fichier.pdf
-lyra clean fichier.pdf            # sélection recommandée
-lyra clean fichier.pdf --all -o propre.pdf
-lyra clean fichier.docx --groups trace.paths,trace.rsid   # catégories précises
-lyra update                          # mise à jour depuis GitHub
-lyra --version
-```
-
-Sous Windows, la version `--release` n'a pas de console : utilise `cargo run -- analyze fichier.pdf` pour voir la sortie.
-
 ## Limites connues
 
 - Les PDF chiffrés ou protégés par mot de passe sont refusés (retire la protection avant).
