@@ -38,9 +38,11 @@ Le nettoyage EXIF est **sélectif** : on peut par exemple retirer le GPS et l'ap
 
 ### Télécharger Lyra (recommandé)
 
-Va dans la section [**Releases**](https://github.com/Powerl3ss/OpenLyra/releases/latest) et télécharge `Lyra-windows.exe` (ou `Lyra-macos` / `Lyra-linux`). Aucun installateur : place le fichier où tu veux et lance-le.
+Va dans la section [**Releases**](https://github.com/Powerl3ss/OpenLyra/releases/latest) :
 
-Windows peut afficher « Windows a protégé votre ordinateur » car l'exécutable n'est pas signé : clique sur *Informations complémentaires* puis *Exécuter quand même*.
+- **Windows** : télécharge `Lyra-windows.exe` et lance-le. Aucun installateur. Si Windows affiche « Windows a protégé votre ordinateur » (l'exécutable n'est pas signé), clique sur *Informations complémentaires* puis *Exécuter quand même*.
+- **macOS** (puces Apple et Intel, macOS 11 ou plus récent) : télécharge `Lyra-macos.dmg`, ouvre-le et glisse **Lyra** dans **Applications**. Au premier lancement, macOS bloque l'application car elle n'est pas signée par un développeur Apple : ouvre *Réglages Système > Confidentialité et sécurité*, puis clique sur *Ouvrir quand même* en face de Lyra. Sur les versions plus anciennes de macOS, un clic droit sur Lyra puis *Ouvrir* suffit.
+- **Linux** : télécharge `Lyra-linux`, rends-le exécutable (`chmod +x Lyra-linux`) puis lance-le.
 
 ### Mises à jour automatiques
 

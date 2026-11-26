@@ -103,8 +103,24 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - name: Compiler
+        if: runner.os != 'macOS'
         run: cargo build --release
+      - name: Compiler (macOS universel, puces Apple et Intel)
+        if: runner.os == 'macOS'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create -output target/release/lyra \
+            target/aarch64-apple-darwin/release/lyra \
+            target/x86_64-apple-darwin/release/lyra
+          codesign --force -s - target/release/lyra
+          lipo -info target/release/lyra
       - name: Préparer le fichier et son empreinte SHA-256
         shell: bash
         run: |
@@ -116,6 +132,46 @@ jobs:
           else
             shasum -a 256 "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
           fi
+      - name: Créer Lyra.app et le DMG (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          APP=build/Lyra.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp target/release/lyra "$APP/Contents/MacOS/lyra"
+          cp assets/lyra.icns "$APP/Contents/Resources/Lyra.icns"
+          cat > "$APP/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Lyra</string>
+            <key>CFBundleDisplayName</key><string>Lyra</string>
+            <key>CFBundleIdentifier</key><string>io.github.openlyra</string>
+            <key>CFBundleExecutable</key><string>lyra</string>
+            <key>CFBundleIconFile</key><string>Lyra</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+          </dict>
+          </plist>
+          PLIST
+          sed -i '' 's/^          //' "$APP/Contents/Info.plist"
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --force --deep -s - "$APP"
+          codesign --verify --verbose "$APP"
+          mkdir -p build/dmg
+          cp -R "$APP" build/dmg/
+          ln -s /Applications build/dmg/Applications
+          for i in 1 2 3; do
+            hdiutil create -volname "Lyra" -srcfolder build/dmg -ov -format UDZO dist/Lyra-macos.dmg && break
+            echo "hdiutil a échoué, nouvel essai…"; sleep 5
+          done
+          test -f dist/Lyra-macos.dmg
+          cd dist && shasum -a 256 Lyra-macos.dmg > Lyra-macos.dmg.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
